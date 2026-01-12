@@ -1,106 +1,118 @@
-// Duolingo Unlimited Hearts + Max/Gold Subscription
-// 用于 Stash/Surge 等 http-response 脚本
+// duolingo_unlimited_hearts_max.js
+// 结合 Duolingo Web API 文档的通用补丁脚本
 
 (function () {
   'use strict';
 
-  // ---- 接口范围校验：只处理特定 URL ----
-  try {
-    const url = $request && $request.url;
-    if (!url) {
-      $done({});
-      return;
-    }
-
-    // 匹配形如 /2025-01-12/users/... 的用户数据接口
-    const USER_DATA_REGEX = /\/\d{4}-\d{2}-\d{2}\/users\//;
-
-    // 排除商店商品接口
-    if (!USER_DATA_REGEX.test(url) || url.includes('/shop-items')) {
-      $done({});
-      return;
-    }
-  } catch (_) {
-    // 取 URL 失败直接放行
-    $done({});
-    return;
-  }
-
-  // ---- 解析响应体 ----
-  const body = $response && $response.body;
-  if (!body) {
+  const rawBody = $response && $response.body;
+  if (!rawBody) {
     $done({});
     return;
   }
 
   let data;
   try {
-    data = JSON.parse(body);
+    data = JSON.parse(rawBody);
   } catch (e) {
-    // 不是 JSON，直接放行
     $done({});
     return;
   }
 
-  // 仅处理“对象”类型（排除数组等）
-  if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    $done({});
-    return;
-  }
+  // ---- 打补丁的核心函数：传入一个“疑似用户对象” ----
+  function patchUser(user) {
+    if (!user || typeof user !== 'object') return;
 
-  // ---- 构造更稳妥的未来过期时间（当前时间 + 20 年）----
-  const now = Date.now();
-  const YEARS = 20;
-  const FUTURE_EXPIRATION = now + YEARS * 365 * 24 * 60 * 60 * 1000;
-
-  const CUSTOM_SHOP_ITEMS = {
-    gold_subscription: {
-      itemName: 'gold_subscription',
-      subscriptionInfo: {
-        vendor: 'STRIPE',
-        renewing: true,
-        isFamilyPlan: true,
-        expectedExpiration: FUTURE_EXPIRATION
-      }
+    // 1) 无限红心（health）
+    if (user.health && typeof user.health === 'object') {
+      user.health.unlimitedHeartsAvailable = true;
     }
-  };
 
-  // ---- 1) 无限红心 ----
-  if (!data.health || typeof data.health !== 'object') {
-    // 保守做法：如果没有 health，就不强行创建，减少异常字段
-    // 如需“无论如何都加”，可改为：
-    // data.health = data.health && typeof data.health === 'object' ? data.health : {};
-    // 这里按更安全的方式：仅在服务端返回 health 时修改
+    // 2) Plus / Max 标记
+    user.hasPlus = true;
+
+    if (!user.trackingProperties || typeof user.trackingProperties !== 'object' || Array.isArray(user.trackingProperties)) {
+      user.trackingProperties = {};
+    }
+    user.trackingProperties.has_item_gold_subscription = true;
+
+    // 如果有类似 plusTier / plusLevel，可在这里补上（字段名需根据你抓到的 JSON 确认）
+    // if (!user.trackingProperties.plus_tier) {
+    //   user.trackingProperties.plus_tier = 'MAX';
+    // }
+
+    // 3) 订阅 / shopItems / subscriptionInfo
+    const now = Date.now();
+    const YEARS = 20;
+    const FUTURE = now + YEARS * 365 * 24 * 60 * 60 * 1000; // 20 年后
+
+    const CUSTOM_SHOP_ITEMS = {
+      gold_subscription: {
+        itemName: 'gold_subscription',
+        subscriptionInfo: {
+          vendor: 'STRIPE',
+          renewing: true,
+          isFamilyPlan: true,
+          expectedExpiration: FUTURE
+        }
+      }
+    };
+
+    if (!user.shopItems || typeof user.shopItems !== 'object' || Array.isArray(user.shopItems)) {
+      user.shopItems = {};
+    }
+    user.shopItems = Object.assign({}, user.shopItems, CUSTOM_SHOP_ITEMS);
+
+    if (!user.subscriptionInfo || typeof user.subscriptionInfo !== 'object') {
+      user.subscriptionInfo = {};
+    }
+    user.subscriptionInfo.active = true;
+    user.subscriptionInfo.expiration = FUTURE;
+
+    // 如果文档里有其它关键字段（比如 isPlusSubscriber、subscriptionStatus），也可在这里补
+    // user.subscriptionStatus = 'ACTIVE';
+  }
+
+  // ---- 根据真实返回的多种结构，尽可能找到“用户对象”并打补丁 ----
+
+  function process(obj) {
+    if (!obj || typeof obj !== 'object') return;
+
+    // 直接是用户对象的情况
+    if (!Array.isArray(obj)) {
+      patchUser(obj);
+    }
+
+    // 常见结构之一：{ user: {...} }
+    if (obj.user && typeof obj.user === 'object') {
+      patchUser(obj.user);
+    }
+
+    // 如果有 { users: [...] } 或 { data: {...} } 之类，可以扩展：
+    if (Array.isArray(obj.users)) {
+      obj.users.forEach(patchUser);
+    }
+    if (obj.data && typeof obj.data === 'object') {
+      process(obj.data);
+    }
+  }
+
+  if (Array.isArray(data)) {
+    data.forEach(process);
   } else {
-    data.health.unlimitedHeartsAvailable = true;
+    process(data);
   }
 
-  // ---- 2) Max / Gold 订阅标记 ----
-  // 标记为有 Plus
-  data.hasPlus = true;
+  // ---- 调试标记，方便你在浏览器 Network 里确认脚本是否运行 ----
+  try {
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      data._patchedByStash = 'YES';
+    }
+  } catch (_) {}
 
-  // trackingProperties 内的订阅标记
-  if (!data.trackingProperties || typeof data.trackingProperties !== 'object' || Array.isArray(data.trackingProperties)) {
-    data.trackingProperties = {};
-  }
-  data.trackingProperties.has_item_gold_subscription = true;
-
-  // 如需进一步伪装为更高等级订阅，可以在这里加：
-  // data.trackingProperties.plus_tier = 'MAX';  // 示例字段名，需根据真实返回调整
-
-  // ---- 3) 合并 shopItems ----
-  if (!data.shopItems || typeof data.shopItems !== 'object' || Array.isArray(data.shopItems)) {
-    data.shopItems = {};
-  }
-  // 在不破坏原有字段的前提下注入 gold_subscription
-  data.shopItems = Object.assign({}, data.shopItems, CUSTOM_SHOP_ITEMS);
-
-  // ---- 回写响应体 ----
   let newBody;
   try {
     newBody = JSON.stringify(data);
   } catch (e) {
-    // 序列化异常则放行原始响应
     $done({});
     return;
   }

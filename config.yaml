@@ -10,6 +10,7 @@ http:
       name: duolingo_unlimited_hearts_max
       type: response
       require-body: true
+      body-transform: json
       max-size: 0
 
 script-providers:

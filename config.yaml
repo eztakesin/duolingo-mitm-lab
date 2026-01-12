@@ -8,7 +8,7 @@ http:
     # 匹配模式：任意 duolingo 域名下，路径中包含 /YYYY-MM-DD/users/
     - match: https?:\/\/(?:[a-zA-Z0-9-]+\.)?duolingo\.[a-zA-Z]{2,6}(?:\.[a-zA-Z]{2})?\/\d{4}-\d{2}-\d{2}\/users\/
       name: duolingo_unlimited_hearts_max
-      type: response-body
+      type: response
       require-body: true
       max-size: 0
 

@@ -1,4 +1,4 @@
-// Duolingo Unlimited Hearts + Max - Stash MitM Response Body Script
+// duolingo_unlimited_hearts_max.js
 (function () {
   'use strict';
 
@@ -12,6 +12,7 @@
   try {
     data = JSON.parse(body);
   } catch (e) {
+    // 不是 JSON，直接放行
     $done({});
     return;
   }
@@ -29,12 +30,12 @@
   };
 
   if (data && typeof data === 'object') {
-    // 无限红心
+    // 1) 无限红心
     if (data.health && typeof data.health === 'object') {
       data.health.unlimitedHeartsAvailable = true;
     }
 
-    // Max / Gold 订阅标记
+    // 2) Max / Gold 订阅标记
     data.hasPlus = true;
 
     if (!data.trackingProperties || typeof data.trackingProperties !== 'object') {
@@ -42,7 +43,7 @@
     }
     data.trackingProperties.has_item_gold_subscription = true;
 
-    // 合并 shopItems
+    // 3) 合并 shopItems（如果将来接口里有这个字段）
     if (!data.shopItems || typeof data.shopItems !== 'object') {
       data.shopItems = {};
     }
@@ -50,6 +51,7 @@
   }
 
   const newBody = JSON.stringify(data);
+  console.log('patched duolingo user data, hasPlus=', data.hasPlus, 'unlimitedHearts=', data.health && data.health.unlimitedHeartsAvailable);
   $done({ body: newBody });
 })();
 

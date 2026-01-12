@@ -1,0 +1,21 @@
+http:
+  mitm:
+    - '*.duolingo.com'
+    - '*.duolingo.cn'
+
+  script:
+    # Duolingo 用户数据接口：无限红心 + Max
+    # 匹配模式：任意 duolingo 域名下，路径中包含 /YYYY-MM-DD/users/
+    - match: https?:\/\/(?:[a-zA-Z0-9-]+\.)?duolingo\.[a-zA-Z]{2,6}(?:\.[a-zA-Z]{2})?\/\d{4}-\d{2}-\d{2}\/users\/
+      name: duolingo_unlimited_hearts_max
+      type: response-body
+      require-body: true
+      max-size: 0
+
+script-providers:
+  # Duolingo 无限红心 + Max 脚本
+  duolingo_unlimited_hearts_max:
+    # 请将 <yourname> <yourrepo> 替换成你自己的 GitHub 用户名与仓库名
+    # 如果你脚本在 main 分支：/main/duolingo_unlimited_hearts_max.js
+    url: https://raw.githubusercontent.com/<yourname>/<yourrepo>/main/duolingo_unlimited_hearts_max.js
+    interval: 86400
